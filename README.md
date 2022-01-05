@@ -1,8 +1,6 @@
 # gha-docker-build-test-scan-push
-Checks if workflow is on latest release
+Runs a set of jobs that build, test, scan, and push a docker container to ECR.
 
-# Related Repositories
-- https://github.com/vergesense/gha-check-workflow-versions
-- https://github.com/vergesense/gha-docker-build-test-scan-push
-- https://github.com/vergesense/gha-docker-lint
-- https://github.com/vergesense/gha-terraform-ci
+# Related Links
+- [Reusable Workflow Documentation](https://docs.github.com/en/actions/learn-github-actions/reusing-workflows)
+- [Other Vergesense GHA Repositories](https://github.com/vergesense?q=gha-&type=all&language=&sort=)
