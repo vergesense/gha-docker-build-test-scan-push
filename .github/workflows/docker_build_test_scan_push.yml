@@ -5,21 +5,27 @@ on:
   workflow_call:
     inputs:
       image-repo-uri:
+        description: 'URL of the ECR repository'
         required: true
         type: string
       image-version:
+        description: 'Version (tag) of the image being pushed to ECR'
         required: true
         type: string
       aws-region:
+        description: 'AWS region that the resources live in'
         required: true
         type: string
       goss-command:
+        description: 'Command goss runs'
         required: true
         type: string
     secrets:
       aws-access-key-id:
+        description: 'AWS Access Key'
         required: true
       aws-secret-access-key:
+        description: 'AWS Secret Key'
         required: true
 
 
