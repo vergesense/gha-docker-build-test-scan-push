@@ -32,7 +32,7 @@ on:
       aws-secret-access-key:
         description: 'AWS Secret Key'
         required: true
-      devops-github-machine_pat:
+      devops-github-machine-pat:
         description: 'DevOps Github machine user personal access token'
         required: false
 
