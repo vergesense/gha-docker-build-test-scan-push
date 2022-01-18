@@ -21,10 +21,6 @@ on:
         description: 'URL of the ECR repository'
         required: true
         type: string
-      image-version:
-        description: 'Version (tag) of the image being pushed to ECR'
-        required: true
-        type: string
     secrets:
       aws-access-key-id:
         description: 'AWS Access Key'
@@ -45,7 +41,11 @@ jobs:
       - name: set-vars
         id: vars
         run: |
-          echo 'IMAGE_TAG=${{ inputs.image-repo-uri }}:${{ inputs.image-version }}' >> "$GITHUB_ENV"
+          IMAGE_VERSION="$(git rev-parse --short HEAD)"
+          {
+            echo "IMAGE_VERSION=${IMAGE_VERSION}"
+            echo "IMAGE_TAG=${{ inputs.image-repo-uri }}:${IMAGE_VERSION}"
+          } >> "$GITHUB_ENV"
       - uses: docker/setup-buildx-action@v1
       - name: build-and-export-to-docker
         uses: docker/build-push-action@v2
@@ -106,5 +106,5 @@ jobs:
               owner: '${{ github.repository_owner }}',
               repo: '${{ inputs.deploy-dispatch-repo }}',
               event_type: 'deploy',
-              client_payload: {"environment": "stg", "app_version": "${{ inputs.image-version }}"}
+              client_payload: {"environment": "stg", "app_version": "${{ env.IMAGE_VERSION }}"}
             });
