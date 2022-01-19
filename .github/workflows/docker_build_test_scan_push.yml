@@ -4,20 +4,21 @@ name: docker_docker_build_test_scan_push
 on:
   workflow_call:
     inputs:
-      image-repo-uri:
-        description: 'URL of the ECR repository'
-        required: true
-        type: string
-      image-version:
-        description: 'Version (tag) of the image being pushed to ECR'
-        required: true
-        type: string
       aws-region:
         description: 'AWS region that the resources live in'
         required: true
         type: string
+      deploy-dispatch-repo:
+        description: 'Name of the repository to send deploy dispatches to'
+        default: none
+        required: true
+        type: string
       goss-command:
         description: 'Command goss runs'
+        required: true
+        type: string
+      image-repo-uri:
+        description: 'URL of the ECR repository'
         required: true
         type: string
     secrets:
@@ -27,6 +28,9 @@ on:
       aws-secret-access-key:
         description: 'AWS Secret Key'
         required: true
+      devops-github-machine-pat:
+        description: 'DevOps Github machine user personal access token'
+        required: false
 
 
 jobs:
@@ -37,32 +41,39 @@ jobs:
       - name: set-vars
         id: vars
         run: |
-          IMAGE_REPO_URI="${{ inputs.image-repo-uri }}"
-          IMAGE_VERSION="${{ inputs.image-version }}"
-          echo "::set-output name=IMAGE_VERSION::$IMAGE_VERSION"
-          echo "::set-output name=IMAGE_REPO_URI::$IMAGE_REPO_URI"
-          echo "::set-output name=IMAGE_TAG::$IMAGE_REPO_URI:$IMAGE_VERSION"
-          echo '::set-output name=GOSS_VERSION::0.3.16'
-          echo '::set-output name=GOSS_URL::https://github.com/aelsabbahy/goss/releases/download'
-          echo '::set-output name=GOSS_SHA256::827e354b48f93bce933f5efcd1f00dc82569c42a179cf2d384b040d8a80bfbfb'
-          echo '::set-output name=DGOSS_SHA256::384d5f6eb5a8f11df0da838cb059f0fdfb272469f275c5ce17d00ac2ae34ef05'
-      - name: docker-build
-        run: docker build . -t "${{ steps.vars.outputs.IMAGE_TAG }}"
+          IMAGE_VERSION="$(git rev-parse --short HEAD)"
+          {
+            echo "IMAGE_VERSION=${IMAGE_VERSION}"
+            echo "IMAGE_TAG=${{ inputs.image-repo-uri }}:${IMAGE_VERSION}"
+          } >> "$GITHUB_ENV"
+      - uses: docker/setup-buildx-action@v1
+      - name: build-and-export-to-docker
+        uses: docker/build-push-action@v2
+        with:
+          cache-from: type=gha
+          cache-to: type=gha
+          load: true
+          tags: ${{ env.IMAGE_TAG }}
       - name: install-goss
+        env:
+          GOSS_VERSION: 0.3.16
+          GOSS_SHA256: 827e354b48f93bce933f5efcd1f00dc82569c42a179cf2d384b040d8a80bfbfb
+          DGOSS_SHA256: 384d5f6eb5a8f11df0da838cb059f0fdfb272469f275c5ce17d00ac2ae34ef05
+          GOSS_URL: https://github.com/aelsabbahy/goss/releases/download
         run: |
-          curl -fsSL "${{ steps.vars.outputs.GOSS_URL }}/v${{ steps.vars.outputs.GOSS_VERSION }}/goss-linux-amd64" -o goss
-          curl -fsSL "${{ steps.vars.outputs.GOSS_URL }}/v${{ steps.vars.outputs.GOSS_VERSION }}/dgoss" -o dgoss
-          echo "${{ steps.vars.outputs.GOSS_SHA256 }}  goss" | sha256sum -c
-          echo "${{ steps.vars.outputs.DGOSS_SHA256 }}  dgoss" | sha256sum -c
+          curl -fsSL '${{ env.GOSS_URL }}/v${{ env.GOSS_VERSION }}/goss-linux-amd64' -o goss
+          curl -fsSL '${{ env.GOSS_URL }}/v${{ env.GOSS_VERSION }}/dgoss' -o dgoss
+          echo '${{ env.GOSS_SHA256 }}  goss' | sha256sum -c
+          echo '${{ env.DGOSS_SHA256 }}  dgoss' | sha256sum -c
           chmod 0755 goss dgoss
       - name: goss-testing
         run: |
           export GOSS_PATH=./goss
-          ${{ inputs.goss-command }} "${{ steps.vars.outputs.IMAGE_TAG }}"
+          ${{ inputs.goss-command }} "${{ env.IMAGE_TAG }}"
       - name: run trivy vulnerability scanner
         uses: aquasecurity/trivy-action@0.0.20
         with:
-          image-ref: "${{ steps.vars.outputs.IMAGE_TAG }}"
+          image-ref: "${{ env.IMAGE_TAG }}"
           format: 'table'
           exit-code: '1'
           ignore-unfixed: true
@@ -77,15 +88,23 @@ jobs:
       - name: login-ecr
         if: github.ref == 'refs/heads/main'
         uses: aws-actions/amazon-ecr-login@v1
-      - name: docker-image-push
+      - name: docker-push
         if: github.ref == 'refs/heads/main'
-        run: |
-          docker image push "${{ steps.vars.outputs.IMAGE_TAG }}"
-      # - name: image-version-parameter-store-update
-      #   if: github.ref == 'refs/heads/main'
-      #   run: |
-      #     aws ssm put-parameter --name /images/$GITHUB_REPOSITORY/IMAGE_VERSION  \
-      #     --description "Used by CI/CD, image version that will be deployed by deployment jobs" \
-      #     --value "${{ steps.vars.outputs.IMAGE_VERSION }}" \
-      #     --type String \
-      #     --overwrite
+        uses: docker/build-push-action@v2
+        with:
+          push: true
+          tags: ${{ env.IMAGE_TAG }}
+      - name: deploy-dispatch
+        if: |
+          github.ref == 'refs/heads/main' &&
+          inputs.deploy-dispatch-repo != 'none'
+        uses: actions/github-script@v5
+        with:
+          github-token: ${{ secrets.devops-github-machine-pat }}
+          script: |
+            await github.rest.repos.createDispatchEvent({
+              owner: '${{ github.repository_owner }}',
+              repo: '${{ inputs.deploy-dispatch-repo }}',
+              event_type: 'deploy',
+              client_payload: {"environment": "stg", "app_version": "${{ env.IMAGE_VERSION }}"}
+            });
