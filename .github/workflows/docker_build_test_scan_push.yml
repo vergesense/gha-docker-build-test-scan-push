@@ -22,12 +22,6 @@ on:
         required: true
         type: string
     secrets:
-      aws-access-key-id:
-        description: 'AWS Access Key'
-        required: true
-      aws-secret-access-key:
-        description: 'AWS Secret Key'
-        required: true
       devops-github-machine-pat:
         description: 'DevOps Github machine user personal access token'
         required: false
@@ -82,9 +76,10 @@ jobs:
       - name: configure-aws-creds
         uses: aws-actions/configure-aws-credentials@v1
         with:
-          aws-access-key-id: ${{ secrets.aws-access-key-id }}
-          aws-secret-access-key: ${{ secrets.aws-secret-access-key }}
           aws-region: ${{ inputs.aws-region }}
+          role-duration-seconds: 900
+          role-session-name: gha-${{ github.event.repository.name }}-${{github.run_id}}
+          role-to-assume: arn:aws:iam::885413729717:role/github-actions-ecr-rw
       - name: login-ecr
         if: github.ref == 'refs/heads/main'
         uses: aws-actions/amazon-ecr-login@v1
