@@ -26,6 +26,9 @@ on:
         description: 'DevOps Github machine user personal access token'
         required: false
 
+permissions:
+  id-token: write
+  contents: read
 
 jobs:
   docker_build_test_scan_push:
